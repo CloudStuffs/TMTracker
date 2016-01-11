@@ -127,16 +127,14 @@ class Tracker {
 		}
 	}
 
-	public function country() {
+	public function country($ip) {
 		// This creates the Reader object, which should be reused across
 		// lookups.
 		$reader = new Reader(maxmind_db_path);
 
 		// Replace "city" with the appropriate method for your database, e.g.,
 		// "country".
-		$record = $reader->country($this->get_client_ip());
-
-		//print($record->country->isoCode . "\n"); // 'US'
+		$record = $reader->country($ip);
 		
 		return $record->country->isoCode;
 	}

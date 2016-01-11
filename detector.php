@@ -14,6 +14,13 @@ Class Detector Extends Tracker {
 			$mongo = $m->stats;
 			Registry::set("MongoDB", $mongo);
 		}
+
+		$parser = Registry::get("UAParser");
+		if (!$parser) {
+			$parser = UAParser\Parser::create();
+			Registry::set("UAParser", $parser);
+		}
+
 	}
 	/**
 	 * Stores various actions
@@ -33,121 +40,37 @@ Class Detector Extends Tracker {
 		if (empty(self::$_actions)) {
 			$actions = array(
 				"1" => array(
-					"title" => "Do Nothing",
-					"func" => function ($inputs = '') {
-						return 'return 0;';
-					},
-					"help" => "This will do Nothing.."
+					"title" => "Do Nothing"
 				),
 				"2" => array(
-					"title" => "Wait",
-					"func" => function ($inputs) {
-						return 'sleep('. $inputs . ');';
-					},
-					"help" => "For how many seconds user-agent should wait when trigger is detected"
+					"title" => "Wait"
 				),
 				"3" => array(
-					"title" => "Redirect",
-					"func" => function ($inputs) {
-						return 'header("Location: '.$inputs.'");exit;';
-					},
-					"help" => "Enter the location where to redirect"
+					"title" => "Redirect"
 				),
 				"4" => array(
-					"title" => "POST Values",
-					"func" => function ($inputs) {
-						$data = explode(";", $inputs);
-						
-						$url = array_shift($data);
-						$url = preg_replace('/url=/', '', $url);
-						
-						$postfields = array();
-						foreach ($data as $d) {
-							$d = explode("=", $d);
-							$postfields["$d[0]"] = $d[1];
-						}
-
-						return '
-						$ch = curl_init();
-						curl_setopt($ch, CURLOPT_URL, "'.$url.'");
-						curl_setopt($ch, CURLOPT_POST, ' .count($postfields).');
-						curl_setopt($ch, CURLOPT_POSTFIELDS, "'.http_build_query($postfields).'");
-						curl_setopt($ch, CURLOPT_HEADER, TRUE);
-						curl_setopt($ch, CURLOPT_FOLLOWLOCATION, 1);
-						curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-						curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 2);
-						curl_setopt($ch, CURLOPT_TIMEOUT, 5);
-						curl_exec($ch);
-						';
-					},
-					"help" => "Enter {key} => {value} pairs separated with semicolon and url of the page must be set using url='something' URL should be the the first key. <br/>Eg: url=http://somepage.com/something;name=Darrin;country=Canada"
+					"title" => "POST Values"
 				),
 				"5" => array(
-					"title" => "Overlay Iframe",
-					"func" => function ($inputs) {
-						return "echo '$inputs';";
-					},
-					"help" => "Enter the code for iframe"
+					"title" => "Overlay Iframe"
 				),
 				"6" => array(
-					"title" => "Popup",
-					"func" => function ($inputs) {
-						return "echo '<script>alert($inputs)</script>';";
-					},
-					"help" => 'enter the message for popup in "double quotes"'
+					"title" => "Popup"
 				),
 				"7" => array(
-					"title" => "Hide Content",
-					"func" => function ($inputs) {
-						return "echo '
-							<script>
-							document.getElementById($inputs).style.display = 'none';
-							</script>
-						';";
-					},
-					"help" => 'Enter id of the element which is to be hidden. eg: "My_Custom_ID". (Id must be in double quotes)'
+					"title" => "Hide Content"
 				),
 				"8" => array(
-					"title" => "Replace Content",
-					"func" => function ($inputs) {
-						$data = explode(";", $inputs);
-						$id = preg_replace("/id=/", '', $data[0]);
-						$content = preg_replace("/content=/", '', $data[1]);
-						return "echo '
-							<script>
-							document.getElementById($id).innerHTML = $content;
-							</script>
-						';";
-					},
-					"help" => 'Enter id of the element which is to be replaced. Eg: id="myThisContent";content="Your Content" (id & content must be in double-inverted-quotes)'
+					"title" => "Replace Content"
 				),
 				"9" => array(
-					"title" => "Send Email",
-					"func" => function ($inputs, $email) {
-						$header = "From: $email \r\n";
-						
-						$data = explode(";", $inputs);
-						$to = preg_replace("/to=/", '', $data[0]);
-						$subject = preg_replace("/subject=/", '', $data[1]);
-						$body = preg_replace("/body=/", '', $data[2]);
-						
-						return "mail($to, $subject, $body, '$header');";
-					},
-					"help" => 'to="Enter the email id of recipient";subject="Add the subject of email";body="Enter the text of email"; Only change the content within the quotes'
+					"title" => "Send Email"
 				),
 				"10" => array(
-					"title" => "Run Javascript",
-					"func" => function ($inputs) {
-						return 'echo "<script>'.$inputs.'</script>"';
-					},
-					"help" => "Copy and paste the javascript code in the text box"
+					"title" => "Run Javascript"
 				),
 				"11" => array(
-					"title" => "Run PHP",
-					"func" => function ($inputs) {
-						return $inputs;
-					},
-					"help" => "Copy and paste the php code in the text box. Exclude <?php ?> tags"
+					"title" => "Run PHP"
 				)
 			);
 			self::$_actions = $actions;
@@ -164,32 +87,26 @@ Class Detector Extends Tracker {
 			$triggers = array(
 				"1" => array(
 					"title" => "PageView",
-					"help" => "Just used for tracking website, leave the field empty",
 					"detect" => function ($opts) {
 						return true;
 					}
 				),
 				"2" => array(
 					"title" => "Location",
-					"verify" => function ($inputs) {},
 					"detect" => function ($opts) {
 						return strtolower($opts['user']['location']) == strtolower($opts['stored']);
-					},
-					"help" => 'Enter the 2-digit country code.. Refer: <a href="https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2#Officially_assigned_code_elements">Country Codes</a>'
+					}
 				),
 				"3" => array(
 					"title" => "Landing Page",
-					"verify" => function ($inputs) {},
 					"detect" => function ($opts) {
 						$stored = strtolower($opts['saved']);
 						$current = strtolower($opts['server']['landingPage']);
 						return $current == $stored;
-					},
-					"help" => "Enter full url of the page on which trigger is to be executed<br> The page should be on your domain"
+					}
 				),
 				"4" => array(
 					"title" => "Time of Visit",
-					"verify" => function ($inputs) {},
 					"detect" => function ($opts) {
 						$range = explode("-", $opts['saved']);
 						
@@ -202,8 +119,7 @@ Class Detector Extends Tracker {
 						$end_time = strtotime($end);
 
 						return ($current_time > $start_time && $current_time < $end_time);
-					},
-					"help" => "Enter the range of time. For eg. 10:30-14:50 (Time in 24 hours)"
+					}
 				),
 				"5" => array(
 					"title" => "Bots",
@@ -217,16 +133,14 @@ Class Detector Extends Tracker {
 							}
 						}
 
-						if (strtolower($opts['saved']) == 'crawler' && $opts['user']['ua_info']->agent_type == "Crawler") {
+						if (strtolower($opts['saved']) == 'crawler' && $opts['user']['ua_info']->device->family == "Spider") {
 							$response = true;
 						}
 						return $response;
-					},
-					"help" => 'This trigger will be executed for the all the Bots- User Agent. Eg: Google Bot, Baidu Spider etc. <br>Refer: <a href="http://www.useragentstring.com/pages/Crawlerlist/">Crawlers List</a><br>Enter Crawler-User agent string "," separated. Or for all bots just enter "Crawler"'
+					}
 				),
 				"6" => array(
 					"title" => "IP Range",
-					"verify" => function ($inputs) {},
 					"detect" => function ($opts) {
 						if (strpos($opts['saved'], '/') == false) {
 						    $range.= '/32';
@@ -238,94 +152,87 @@ Class Detector Extends Tracker {
 						$wildcard_decimal = pow(2, (32 - $netmask)) - 1;
 						$netmask_decimal = ~ $wildcard_decimal;
 						return (($ip_decimal & $netmask_decimal) == ($range_decimal & $netmask_decimal));
-					},
-					"help" => "Range of IP eg: 168.240.10.10/168.241.10.10"
+					}
 				),
 				"7" => array(
 					"title" => "User-Agent",
 					"verify" => function ($inputs) {},
 					"detect" => function ($opts) {
 						return ($opts['user']['ua'] == $opts['saved']);
-					},
-					"help" => 'Enter the user agent on which trigger is to be executed. Refer: <a href="http://www.useragentstring.com/pages/useragentstring.php">Differnent User Agents</a>'
+					}
 				),
 				"8" => array(
 					"title" => "Browser",
-					"verify" => function ($inputs) {
-						
-					},
 					"detect" => function ($opts) {
-						return (strtolower($opts['user']['ua_info']->agent_name) == strtolower($opts['saved']));
-					},
-					"help" => "Enter the name of browser on which trigger is to be executed. Eg: Chrome, Firefox, Opera etc."
+						$current = $opts['user']['ua_info']->ua->family;
+						$saved = $opts['saved'];
+						return stristr($current, $saved);
+					}
 				),
 				"9" => array(
 					"title" => "Operating System",
-					"verify" => function ($inputs) {},
 					"detect" => function ($opts) {
-						return (strtolower($opts['user']['ua_info']->agent_name) == strtolower($opts['saved']));
-					},
-					"help" => "Enter the name of Operating System on which trigger is to be executed. Eg: Linux, Windows etc"
+						$current = $opts['user']['ua_info']->os->family;
+						$saved = $opts['saved'];
+						return stristr($current, $saved);
+					}
 				),
 				"10" => array(
 					"title" => "Device Type",
-					"verify" => function ($inputs) {},
 					"detect" => function ($opts) {
 						$saved = strtolower($opts['saved']);
 
-						$check = strtolower($opts['user']['ua_info']->os_name);
+						$check = strtolower($opts['user']['ua_info']->device->family);
 						switch ($check) {
-							case 'linux':
+							case 'other':
 								$result = 'desktop';
 								break;
 							
-							case 'windows nt':
-								$result = 'desktop';
-								break;
-
-							case 'os x':
-								$result = 'desktop';
-								break;
-
-							case 'unknown':
-								$result = 'desktop';
+							case 'android':
+								$result = 'mobile';
 								break;
 
 							default:
-								$result = 'mobile';
+								if (stristr($check, "Smartphone")) {
+									$result = 'mobile';
+								} elseif (stristr($opts['user']['ua_info']->os->family, "Android")) {
+									$result = "mobile";
+								} else {
+									$result = false;
+								}
 								break;
+						}
+						if (!$result) {
+							if (stristr($opts['user']['ua_info']->ua->family, "Mobile")) {
+								$result = 'mobile';
+							} else {
+								$result = 'desktop';
+							}
 						}
 
 						return ($saved == $result);
-					},
-					"help" => "Device Type: mobile or desktop"
+					}
 				),
 				"11" => array(
 					"title" => "Referrer",
-					"verify" => function ($inputs) {},
 					"detect" => function ($opts) {
 						$response = stristr($opts['server']['referer'], $opts['saved']);
 						return ($response !== FALSE) ? true : false;
-					},
-					"help" => "URL from which the visit was done"
+					}
 				),
 				"12" => array(
 					"title" => "Active Login",
-					"verify" => function ($inputs) {},
 					"detect" => function ($opts) {
 						return false;
-					},
-					"help" => "Enter the session key in which uniquely identifies the user"
+					}
 				),
 				"13" => array(
 					"title" => "Repeat Visitor",
-					"verify" => function ($inputs) {},
 					"detect" => function ($opts) {
 						$cookie = $opts["cookies"];
 						
 						return isset($cookie["__trafficMonitor"]) ? true : false;
-					},
-					"help" => "Just leave the field empty. We'll check automatically :)"
+					}
 				)
 			);
 			self::$_triggers = $triggers;
@@ -347,7 +254,7 @@ Class Detector Extends Tracker {
 
 			$t_collection = $mongo_db->selectCollection("triggers");
 			$a_collection = $mongo_db->selectCollection("actions");
-			$triggers = $t_collection->find(array('website_id' => (int) $website["website_id"]));
+			$triggers = $t_collection->find(array('website_id' => (string) $website["website_id"]));
 
 			$code = ''; $last = '';
 			$arr_triggers = $this->_triggers();
@@ -407,9 +314,10 @@ Class Detector Extends Tracker {
 		$data['user']['ip'] = RequestMethods::post("REMOTE_ADDR");
 		$data['user']['ua'] = RequestMethods::post("HTTP_USER_AGENT");
 		
-		$user_agent = Shared\Detector::UA($data['user']['ua']);
+		$parser = Registry::get("UAParser");
+		$user_agent = $parser->parse($data['user']['ua']);
 		
-		$data['user']['location'] = $this->country();
+		$data['user']['location'] = $this->country($data['user']['ip']);
 		$data['user']['ua_info'] = $user_agent;
 		
 		$data['server']['name'] = RequestMethods::post("HTTP_HOST");
@@ -420,7 +328,6 @@ Class Detector Extends Tracker {
 		$data["cookies"] = RequestMethods::post("c");
 		$data["session"] = RequestMethods::post("s");
 
-		$this->_log('<pre>'. print_r($data, true). '</pre>');
 		return $data;
 	}
 
