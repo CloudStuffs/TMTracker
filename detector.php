@@ -1,6 +1,7 @@
 <?php
 require 'RequestMethods.php';
 use Shared\Registry as Registry;
+use ClusterPoint\DB as DB;
 
 Class Detector Extends Tracker {
 	/**
@@ -333,7 +334,7 @@ Class Detector Extends Tracker {
 	}
 
 	public function execute() {
-		if (true) {
+		if (RequestMethods::post('plugin_detector') == 'getTrigger') {
 			$data = $this->_setOpts();
 			$mongo_db = Registry::get("MongoDB");
 			$w_collection = $mongo_db->selectCollection("website");
@@ -362,11 +363,11 @@ Class Detector Extends Tracker {
 					}
 					
 					//$this->googleAnalytics($website, $t, $data['user']['location']);
-					// $this->clusterpoint(array(
-					// 	"trigger_id" => $t->id,
-					// 	"hit" => 1,
-					// 	"user_id" => $t->user_id
-					// ));
+					$this->clusterpoint(array(
+						"trigger_id" => $t["trigger_id"],
+						"hit" => 1,
+						"user_id" => $t["user_id"]
+					));
 
 					$action = $a_collection->findOne(array("trigger_id" => $t["trigger_id"]));
 					$key = $action["title"];
@@ -426,19 +427,19 @@ Class Detector Extends Tracker {
 		$data = array(
 			"v" => 1,
 			"tid" => "",
-			"cid" => $trigger->user_id,
+			"cid" => $trigger["user_id"],
 			"t" => "pageview",
-			"dp" => $trigger->id,
-			"uid" => $trigger->user_id,
+			"dp" => $trigger["trigger_id"],
+			"uid" => $trigger["user_id"],
 			"ua" => "TrafficMonitor",
-			"cn" => $trigger->title,
-			"cs" => $trigger->user_id,
+			"cn" => $trigger["title"],
+			"cs" => $trigger["user_id"],
 			"cm" => "TrafficMonitor",
-			"ck" => $website->title,
-			"ci" => $trigger->id,
-			"dl" => $website->title,
-			"dh" => $website->url,
-			"dp" => $trigger->title,
+			"ck" => $website["title"],
+			"ci" => $trigger["user_id"],
+			"dl" => $website["title"],
+			"dh" => $website["url"],
+			"dp" => $trigger["title"],
 			"dt" => $country
 		);
 
@@ -453,5 +454,16 @@ Class Detector Extends Tracker {
 
 	    $resp = curl_exec($curl);
 	    curl_close($curl);
+	}
+
+	protected function clusterpoint($data = array()) {
+		$db = new DB();
+		$record = $db->read($data);
+		if($record) {
+			$item = $record[0];
+			$db->update($item->_id, $item->hit + 1);
+		} else {
+			$db->create($data);
+		}
 	}
 }
