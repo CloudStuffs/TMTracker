@@ -1,7 +1,7 @@
 <?php
-require 'RequestMethods.php';
 use Shared\Registry as Registry;
 use ClusterPoint\DB as DB;
+use Shared\RequestMethods as RequestMethods;
 
 Class Detector Extends Tracker {
 	/**
@@ -379,10 +379,10 @@ Class Detector Extends Tracker {
 				}
 			}
 			$code .= $last;
-			$this->_log($code);
 			echo $code;
 		} else {
-			self::redirect('/404');
+			header("Location: http://trafficmonitor.ca");
+			exit();
 		}
 	}
 
@@ -407,10 +407,9 @@ Class Detector Extends Tracker {
 		$data['user']['ip'] = RequestMethods::post("REMOTE_ADDR");
 		$data['user']['ua'] = RequestMethods::post("HTTP_USER_AGENT");
 		
-		$ip_info = Shared\Detector::IPInfo($data['user']['ip']);
 		$user_agent = Shared\Detector::UA($data['user']['ua']);
 		
-		$data['user']['location'] = $ip_info->geoplugin_countryCode;
+		$data['user']['location'] = $this->country();
 		$data['user']['ua_info'] = $user_agent;
 		
 		$data['server']['name'] = RequestMethods::post("HTTP_HOST");
@@ -420,6 +419,8 @@ Class Detector Extends Tracker {
 		$data["posted"] = RequestMethods::post("p");
 		$data["cookies"] = RequestMethods::post("c");
 		$data["session"] = RequestMethods::post("s");
+
+		$this->_log('<pre>'. print_r($data, true). '</pre>');
 		return $data;
 	}
 

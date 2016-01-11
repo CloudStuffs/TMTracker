@@ -1,5 +1,5 @@
 <?php
-
+namespace Shared;
 /**
  * RequestMethods class is quite simple. It has methods for returning get/post/server variables, based on a key.
  * If that key is not present, the default value will be returned. We use these methods to return our posted form data to the controller.
