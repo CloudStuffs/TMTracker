@@ -1,4 +1,8 @@
-
+# FTP config file
 sftp-config.json
 
+# configuration file
 config.php
+
+# Logs folder
+logs/

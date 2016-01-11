@@ -333,26 +333,31 @@ Class Detector Extends Tracker {
 	}
 
 	public function execute() {
-		if (RequestMethods::post('plugin_detector') == 'getTrigger') {
+		if (true) {
 			$data = $this->_setOpts();
-			$w_collection = Registry::get("MongoDB")->website;
+			$mongo_db = Registry::get("MongoDB");
+			$w_collection = $mongo_db->selectCollection("website");
 			$website = $w_collection->findOne(array("url" => $data['server']['name']));
 
-			die($website);
-
-			if (!$website) {
+			if (!isset($website)) {
 				echo 'return 0;';
 				return;
 			}
-			$triggers = Trigger::all(array("website_id = ?" => $website->id, "live = ?" => true), array("id", "title", "meta", "user_id"));
-			$code = ''; $last = '';
-			foreach ($triggers as $t) {
-				$key = $t->title;
-				$title = $this->triggers["$key"]['title'];
 
-				if (isset($this->triggers["$key"]["detect"])) {
-					$data['saved'] = $t->meta;
-					if (!call_user_func_array($this->triggers["$key"]["detect"], array($data))) {
+			$t_collection = $mongo_db->selectCollection("triggers");
+			$a_collection = $mongo_db->selectCollection("actions");
+			$triggers = $t_collection->find(array('website_id' => (int) $website["website_id"]));
+
+			$code = ''; $last = '';
+			$arr_triggers = $this->_triggers();
+			$arr_actions = $this->_actions();
+			foreach ($triggers as $t) {
+				$key = $t["title"];
+				$title = $arr_triggers["$key"]['title'];
+
+				if (isset($arr_triggers["$key"]["detect"])) {
+					$data['saved'] = $t["meta"];
+					if (!call_user_func_array($arr_triggers["$key"]["detect"], array($data))) {
 						continue;
 					}
 					
@@ -363,20 +368,37 @@ Class Detector Extends Tracker {
 					// 	"user_id" => $t->user_id
 					// ));
 
-					$action = Action::first(array("trigger_id = ?" => $t->id), array("code", "title"));
-					$key = $action->title;
-					if ($this->actions["$key"]["title"] == "Redirect") {
-						$last .= $action->code;
+					$action = $a_collection->findOne(array("trigger_id" => $t["trigger_id"]));
+					$key = $action["title"];
+					if ($arr_actions["$key"]["title"] == "Redirect") {
+						$last .= $action["code"];
 					} else {
-						$code .= $action->code;
+						$code .= $action["code"];
 					}
 				}
 			}
 			$code .= $last;
+			$this->_log($code);
 			echo $code;
 		} else {
 			self::redirect('/404');
 		}
+	}
+
+	protected function _log($message) {
+		$logfile = APP_PATH . "/logs/" . date("Y-m-d") . ".txt";
+        $new = file_exists($logfile) ? false : true;
+        if ($handle = fopen($logfile, 'a')) {
+            $timestamp = strftime("%Y-%m-%d %H:%M:%S", time());
+            $content = "[{$timestamp}]{$message}\n";
+            fwrite($handle, $content);
+            fclose($handle);
+            if ($new) {
+                chmod($logfile, 0755);
+            }
+        } else {
+            echo "Could not open log file for writing";
+        }
 	}
 
 	protected function _setOpts() {
@@ -400,7 +422,7 @@ Class Detector Extends Tracker {
 		return $data;
 	}
 
-	protected function googleAnalytics($website, $trigger, $country) {
+	public function googleAnalytics($website, $trigger, $country) {
 		$data = array(
 			"v" => 1,
 			"tid" => "",
