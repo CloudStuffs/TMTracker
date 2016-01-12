@@ -311,7 +311,7 @@ Class Detector Extends Tracker {
 
 	protected function _setOpts() {
 		$data = array();
-		$data['user']['ip'] = RequestMethods::post("REMOTE_ADDR");
+		$data['user']['ip'] = $this->get_client_ip($_POST);
 		$data['user']['ua'] = RequestMethods::post("HTTP_USER_AGENT");
 		
 		$parser = Registry::get("UAParser");
@@ -327,7 +327,7 @@ Class Detector Extends Tracker {
 		$data["posted"] = RequestMethods::post("p");
 		$data["cookies"] = RequestMethods::post("c");
 		$data["session"] = RequestMethods::post("s");
-
+		
 		return $data;
 	}
 

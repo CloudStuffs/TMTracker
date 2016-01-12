@@ -139,20 +139,23 @@ class Tracker {
 		return $record->country->isoCode;
 	}
 
-	function get_client_ip() {
+	function get_client_ip($arr = null) {
 	    $ipaddress = '';
-	    if ($_SERVER['HTTP_CLIENT_IP'])
-	        $ipaddress = $_SERVER['HTTP_CLIENT_IP'];
-	    else if($_SERVER['HTTP_X_FORWARDED_FOR'])
-	        $ipaddress = $_SERVER['HTTP_X_FORWARDED_FOR'];
-	    else if($_SERVER['HTTP_X_FORWARDED'])
-	        $ipaddress = $_SERVER['HTTP_X_FORWARDED'];
-	    else if($_SERVER['HTTP_FORWARDED_FOR'])
-	        $ipaddress = $_SERVER['HTTP_FORWARDED_FOR'];
-	    else if($_SERVER['HTTP_FORWARDED'])
-	        $ipaddress = $_SERVER['HTTP_FORWARDED'];
-	    else if($_SERVER['REMOTE_ADDR'])
-	        $ipaddress = $_SERVER['REMOTE_ADDR'];
+	    if (!$arr) {
+	    	$arr = &$_SERVER;
+	    }
+	    if (isset($arr['HTTP_CLIENT_IP']))
+	        $ipaddress = $arr['HTTP_CLIENT_IP'];
+	    else if(isset($arr['HTTP_X_FORWARDED_FOR']))
+	        $ipaddress = $arr['HTTP_X_FORWARDED_FOR'];
+	    else if(isset($arr['HTTP_X_FORWARDED']))
+	        $ipaddress = $arr['HTTP_X_FORWARDED'];
+	    else if(isset($arr['HTTP_FORWARDED_FOR']))
+	        $ipaddress = $arr['HTTP_FORWARDED_FOR'];
+	    else if(isset($arr['HTTP_FORWARDED']))
+	        $ipaddress = $arr['HTTP_FORWARDED'];
+	    else if(isset($arr['REMOTE_ADDR']))
+	        $ipaddress = $arr['REMOTE_ADDR'];
 	    else
 	        $ipaddress = 'UNKNOWN';
 	    return $ipaddress;
