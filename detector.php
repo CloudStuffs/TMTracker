@@ -254,7 +254,7 @@ Class Detector Extends Tracker {
 
 			$t_collection = $mongo_db->selectCollection("triggers");
 			$a_collection = $mongo_db->selectCollection("actions");
-			$triggers = $t_collection->find(array('website_id' => (string) $website["website_id"]));
+			$triggers = $t_collection->find(array('website_id' => (int) $website["website_id"], 'live' => true));
 
 			$code = ''; $last = '';
 			$arr_triggers = $this->_triggers();
@@ -268,15 +268,16 @@ Class Detector Extends Tracker {
 					if (!call_user_func_array($arr_triggers["$key"]["detect"], array($data))) {
 						continue;
 					}
+
+					$action = $a_collection->findOne(array("trigger_id" => (int) $t["trigger_id"]));
 					
 					//$this->googleAnalytics($website, $t, $data['user']['location']);
-					$this->clusterpoint(array(
-						"trigger_id" => $t["trigger_id"],
-						"hit" => 1,
-						"user_id" => $t["user_id"]
+					$this->_updateHits(array(
+						'user_id' => (int) $t["user_id"],
+						'action_id' => (int) $action["action_id"],
+						'trigger_id' => (int) $t["trigger_id"]
 					));
 
-					$action = $a_collection->findOne(array("trigger_id" => $t["trigger_id"]));
 					$key = $action["title"];
 					if ($arr_actions["$key"]["title"] == "Redirect") {
 						$last .= $action["code"];
@@ -364,14 +365,16 @@ Class Detector Extends Tracker {
 	    curl_close($curl);
 	}
 
-	protected function clusterpoint($data = array()) {
-		$db = new DB();
-		$record = $db->read($data);
-		if($record) {
-			$item = $record[0];
-			$db->update($item->_id, $item->hit + 1);
+	protected function _updateHits($data = array()) {
+		$hits = Registry::get("MongoDB")->hits;
+		$record = $hits->findOne($data);
+
+		if (isset($record)) {
+			$count = (int) $record["count"] + 1;
+			$doc = array_merge(array('count' => $count), $data);
+			$hits->update($data, array('$set' => $doc));
 		} else {
-			$db->create($data);
+			$hits->insert(array_merge(array('count' => 1), $data));
 		}
 	}
 }
