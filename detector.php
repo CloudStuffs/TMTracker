@@ -94,7 +94,9 @@ Class Detector Extends Tracker {
 				"2" => array(
 					"title" => "Location",
 					"detect" => function ($opts) {
-						return strtolower($opts['user']['location']) == strtolower($opts['stored']);
+						$saved = strtolower($opts['saved']);
+						$current = strtolower($opts['user']['location']);
+						return $saved == $current;
 					}
 				),
 				"3" => array(
@@ -256,37 +258,26 @@ Class Detector Extends Tracker {
 			$a_collection = $mongo_db->selectCollection("actions");
 			$triggers = $t_collection->find(array('website_id' => (int) $website["website_id"], 'live' => true));
 
-			$code = ''; $last = '';
+			$code = '';
 			$arr_triggers = $this->_triggers();
 			$arr_actions = $this->_actions();
 			foreach ($triggers as $t) {
 				$key = $t["title"];
-				$title = $arr_triggers["$key"]['title'];
-
-				if (isset($arr_triggers["$key"]["detect"])) {
+				
+				if (isset($arr_triggers[$key]["detect"])) {
 					$data['saved'] = $t["meta"];
-					if (!call_user_func_array($arr_triggers["$key"]["detect"], array($data))) {
+					if (!call_user_func_array($arr_triggers[$key]["detect"], array(&$data))) {
 						continue;
 					}
 
 					$action = $a_collection->findOne(array("trigger_id" => (int) $t["trigger_id"]));
 					
 					//$this->googleAnalytics($website, $t, $data['user']['location']);
-					$this->_updateHits(array(
-						'user_id' => (int) $t["user_id"],
-						'action_id' => (int) $action["action_id"],
-						'trigger_id' => (int) $t["trigger_id"]
-					));
+					$this->_detectorLogs($t, $action, $data);
 
-					$key = $action["title"];
-					if ($arr_actions["$key"]["title"] == "Redirect") {
-						$last .= $action["code"];
-					} else {
-						$code .= $action["code"];
-					}
+					$code .= $action["code"];
 				}
 			}
-			$code .= $last;
 			echo $code;
 		} else {
 			header("Location: http://trafficmonitor.ca");
@@ -365,16 +356,42 @@ Class Detector Extends Tracker {
 	    curl_close($curl);
 	}
 
-	protected function _updateHits($data = array()) {
-		$hits = Registry::get("MongoDB")->hits;
-		$record = $hits->findOne($data);
+	/**
+	 * Stores the each request logs in Mongo
+	 */
+	protected function _detectorLogs($t, $action, $data) {
+		$hits = Registry::get("MongoDB")->logs;
+		$where = array(
+			'website_id' => (int) $t['website_id'],
+			'user_ip' => $data['user']['ip'],
+			'referer' => ($data['server']['referer'] ? $data['server']['referer'] : "Blank Referer"),
+			'landing_page' => $data['server']['landingPage']
+		);
 
+		$record = $hits->findOne($where);
 		if (isset($record)) {
-			$count = (int) $record["count"] + 1;
-			$doc = array_merge(array('count' => $count), $data);
-			$hits->update($data, array('$set' => $doc));
+			$triggers = $record['triggers'];
+			array_push($triggers, (int) $t['title']);
+			$triggers = array_unique($triggers);
+
+			$actions = $record['actions'];
+			array_push($actions, (int) $action['title']);
+			$actions = array_unique($actions);
+
+			$hits->update($where, array('$set' => array('triggers' => $triggers, 'actions' => $actions)));
 		} else {
-			$hits->insert(array_merge(array('count' => 1), $data));
+			$doc = array(
+				'user_id' => (int) $t["user_id"],
+				'triggers' => array($t['title']),
+				'actions' => array($action['title']),
+				'created' => new \MongoDate(),
+				'user_location' => $data['user']['location'],
+				'user_agent' => $data['user']['ua_info']->originalUserAgent,
+				'user_type' => ($data['user']['ua_info']->device->family == "Spider") ? "Bot" : "Person"
+			);
+			$doc = array_merge($doc, $where);
+			$hits->insert($doc);
 		}
+	
 	}
 }
