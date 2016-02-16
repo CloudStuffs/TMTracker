@@ -218,6 +218,11 @@ Class Detector Extends Tracker {
 				"11" => array(
 					"title" => "Referrer",
 					"detect" => function ($opts) {
+						if (empty($opts['server']['referer']) && empty($opts['saved'])) {
+							return true;
+						} else if (empty($opts['server']['referer']) || empty($opts['saved'])) {
+							return false;
+						}
 						$response = stristr($opts['server']['referer'], $opts['saved']);
 						return ($response !== FALSE) ? true : false;
 					}
@@ -246,43 +251,52 @@ Class Detector Extends Tracker {
 		if (RequestMethods::post('plugin_detector') == 'getTrigger') {
 			$data = $this->_setOpts();
 			$mongo_db = Registry::get("MongoDB");
-			$w_collection = $mongo_db->selectCollection("website");
-			$website = $w_collection->findOne(array("url" => $data['server']['name']));
+			$website = $mongo_db->website->findOne(array("url" => $data['server']['name']));
 
 			if (!isset($website)) {
 				echo 'return 0;';
 				return;
 			}
 
-			$t_collection = $mongo_db->selectCollection("triggers");
-			$a_collection = $mongo_db->selectCollection("actions");
-			$triggers = $t_collection->find(array('website_id' => (int) $website["website_id"], 'live' => true));
+			$triggers = $mongo_db->triggers->find(array('website_id' => (int) $website["website_id"], 'live' => true));
+			$triggers = $this->_sortTriggers($triggers);
 
-			$code = '';
-			$arr_triggers = $this->_triggers();
-			$arr_actions = $this->_actions();
+			$code = ''; $trigs = array(); $acts = array();
+			$arr_triggers = $this->_triggers(); $arr_actions = $this->_actions();
 			foreach ($triggers as $t) {
 				$key = $t["title"];
 				
 				if (isset($arr_triggers[$key]["detect"])) {
 					$data['saved'] = $t["meta"];
-					if (!call_user_func_array($arr_triggers[$key]["detect"], array(&$data))) {
+					if (!call_user_func_array($arr_triggers[$key]["detect"], array($data))) {
 						continue;
 					}
 
-					$action = $a_collection->findOne(array("trigger_id" => (int) $t["trigger_id"]));
+					$action = $mongo_db->actions->findOne(array("trigger_id" => (int) $t["trigger_id"]));
 					
 					//$this->googleAnalytics($website, $t, $data['user']['location']);
-					$this->_detectorLogs($t, $action, $data);
+					$trigs[] = array('title' => $key, 'id' => $t['trigger_id']);
+					$acts[] = array('title' => $action['title'], 'id' => $action['action_id']);
 
 					$code .= $action["code"];
 				}
 			}
 			echo $code;
+			$this->_detectorLogs($trigs, $acts, $data, $website);
 		} else {
 			header("Location: http://trafficmonitor.ca");
 			exit();
 		}
+	}
+
+	protected function _sortTriggers($triggers) {
+		$arr = array();
+		foreach ($triggers as $t) {
+			$arr[$t['priority']] = $t;
+		}
+
+		ksort($arr);
+		return $arr;
 	}
 
 	protected function _log($message) {
@@ -304,17 +318,21 @@ Class Detector Extends Tracker {
 	protected function _setOpts() {
 		$data = array();
 		$data['user']['ip'] = $this->get_client_ip($_POST);
-		$data['user']['ua'] = RequestMethods::post("HTTP_USER_AGENT");
+		$data['user']['ua'] = RequestMethods::post("HTTP_USER_AGENT", "Bot");
 		
 		$parser = Registry::get("UAParser");
 		$user_agent = $parser->parse($data['user']['ua']);
-		
-		$data['user']['location'] = $this->country($data['user']['ip']);
+		try {
+			$c = $this->country($data['user']['ip']);
+		} catch (\Exception $e) {
+			$c = "IN";
+		}
+		$data['user']['location'] = $c;
 		$data['user']['ua_info'] = $user_agent;
 		
 		$data['server']['name'] = RequestMethods::post("HTTP_HOST");
 		$data['server']['landingPage'] = 'http://'. $data['server']['name']. RequestMethods::post("REQUEST_URI");
-		$data['server']['referer'] = RequestMethods::post("HTTP_REFERER");
+		$data['server']['referer'] = RequestMethods::post("HTTP_REFERER", "");
 
 		$data["posted"] = RequestMethods::post("p");
 		$data["cookies"] = RequestMethods::post("c");
@@ -359,10 +377,11 @@ Class Detector Extends Tracker {
 	/**
 	 * Stores the each request logs in Mongo
 	 */
-	protected function _detectorLogs($t, $action, $data) {
+	protected function _detectorLogs($t, $action, $data, $website) {
 		$hits = Registry::get("MongoDB")->logs;
+
 		$where = array(
-			'website_id' => (int) $t['website_id'],
+			'website_id' => (int) $website['website_id'],
 			'user_ip' => $data['user']['ip'],
 			'referer' => ($data['server']['referer'] ? $data['server']['referer'] : "Blank Referer"),
 			'landing_page' => $data['server']['landingPage']
@@ -370,20 +389,14 @@ Class Detector Extends Tracker {
 
 		$record = $hits->findOne($where);
 		if (isset($record)) {
-			$triggers = $record['triggers'];
-			array_push($triggers, (int) $t['title']);
-			$triggers = array_unique($triggers);
-
-			$actions = $record['actions'];
-			array_push($actions, (int) $action['title']);
-			$actions = array_unique($actions);
-
-			$hits->update($where, array('$set' => array('triggers' => $triggers, 'actions' => $actions)));
+			$hits->update($where, array(
+				'$set' => array('created' => new \MongoDate())
+			));
 		} else {
 			$doc = array(
-				'user_id' => (int) $t["user_id"],
-				'triggers' => array($t['title']),
-				'actions' => array($action['title']),
+				'user_id' => (int) $website["user_id"],
+				'triggers' => $t,
+				'actions' => $action,
 				'created' => new \MongoDate(),
 				'user_location' => $data['user']['location'],
 				'user_agent' => $data['user']['ua_info']->originalUserAgent,
